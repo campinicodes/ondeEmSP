@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador DAE</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+          }
+        }
+    </script>
+</head>
+<body>
+    <h1>Arch-O</h1>
+    
+    <div>
+        <h3>Upload do modelo:</h3>
+        <input type="file" id="uploadEdificacao" />
+        <h3>Insira os Parâmetros de Ocupação</h3>
+        <p>Taxa de Ocupação: <input type="text" id="toInsere"></p>
+        <p>Coeficiente de Aproveitamento:<input type="text" id="caInsere"></p>
+        <p>Área Permeável: <input type="text" id="permeabilidade"></p>
+        <button onclick="buscarTerreno(); handleUpload()">BUSCAR TERRENO</button>
+        <p id="resultado"></p>
+    </div>
+
+    <div id="container" style="width: 100%; height: 600px;"></div>
+
+    <div id="loteInfo" style="margin-top: 20px; display: none;">
+        <h3>Informações do Lote:</h3>
+        <p><strong>Setor:</strong> <span id="setor"></span></p>
+        <p><strong>Quadra:</strong> <span id="quadra"></span></p>
+        <p><strong>Lote:</strong> <span id="lote"></span></p>
+        <p><strong>Área do Terreno: </strong> <span id="area"></span></p>
+        <p><strong>C.A: </strong> <span id="ca"></span></p>
+        <p><strong>T.O: </strong> <span id="to"></span></p>
+        <p><strong>Coordenadas do Polígono:</strong></p>
+        <pre id="polygon" style="background-color: #f9f9f9; padding: 10px; border: 1px solid #ddd; overflow-x: auto;"></pre>
+        <div id="map" style="width: 100%; height: 500px;"></div>
+    </div>
+    
+    <script type="module" src="/static/js/viewer.js"></script>
+    <script defer>
+        let map;
+        function inicializarMapa() {
+            map = L.map('map').setView([-15.7801, -47.9292], 14); // Coordenadas iniciais arbitrárias
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        async function buscarTerreno() {
+            let ca = parseFloat(document.getElementById('caInsere').value);
+            let to = parseFloat(document.getElementById('toInsere').value);
+            let permeabilidade = parseFloat(document.getElementById('permeabilidade').value);
+
+            try {
+                const response = await fetch('/get_info');
+                if (!response.ok) throw new Error('Erro ao carregar dados do servidor.');
+                
+                const terrenos = await response.json();
+                let melhorTerreno = null;
+                let menorDiferenca = Infinity;
+
+                terrenos.forEach(terreno => {
+                    let areaPermeavelTerreno = terreno.area * 0.25;
+                    let diferencaPermeabilidade = Math.abs(areaPermeavelTerreno - permeabilidade);
+                    let diferencaCA = Math.abs(terreno.CA - ca);
+                    let diferencaTO = Math.abs(terreno.TO - to);
+                    let pontuacao = diferencaPermeabilidade + diferencaCA + diferencaTO;
+                    if (pontuacao < menorDiferenca) {
+                        menorDiferenca = pontuacao;
+                        melhorTerreno = terreno;
+                    }
+                });
+
+                if (melhorTerreno) {
+                    document.getElementById('resultado').innerText = `O melhor terreno é o de setor ${melhorTerreno.setor}, quadra ${melhorTerreno.quadra} e lote ${melhorTerreno.lote}.`;
+                    document.getElementById('loteInfo').style.display = 'block';
+                    document.getElementById('setor').innerText = melhorTerreno.setor;
+                    document.getElementById('quadra').innerText = melhorTerreno.quadra;
+                    document.getElementById('lote').innerText = melhorTerreno.lote;
+                    document.getElementById('ca').innerText = melhorTerreno.CA;
+                    document.getElementById('to').innerText = melhorTerreno.TO;
+                    document.getElementById('polygon').textContent = JSON.stringify(melhorTerreno.polygon);
+                    
+                    atualizarMapa(melhorTerreno.polygon);
+                } else {
+                    document.getElementById('resultado').innerText = 'Nenhum terreno encontrado compatível.';
+                }
+            } catch (error) {
+                document.getElementById('resultado').innerText = `Erro: ${error.message}`;
+            }
+        }
+
+        function atualizarMapa(coordenadas) {
+            if (!map) {
+                inicializarMapa();
+            } else {
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Polygon) {
+                        map.removeLayer(layer);
+                    }
+                });
+            }
+
+            let latlngs = coordenadas.map(coord => [coord[1], coord[0]]); 
+            let poligono = L.polygon(latlngs, { color: 'red' }).addTo(map);
+            map.fitBounds(poligono.getBounds());
+        }
+
+        window.onload = inicializarMapa;
+    </script>
+</body>
+</html>

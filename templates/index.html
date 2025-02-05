@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onde em SP?</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="static/styles/main.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script type="importmap">
+        {
+          "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+          }
+        }
+    </script>
+</head>
+<body>
+    <div class="header-container">
+        <h1 id="titulo">Onde em <span id="S">S</span>P?</h1>
+        <h3 id="subtitulo">Fit de projeto vs terrenos disponíveis</h3>
+        <a class="sobre-link" onclick="mostrarSobre()">Sobre</a>
+    </div>
+<hr>
+    <div class="sobre-container" id="sobre">
+        <div class="sobre-content">
+            <p>Este aplicativo foi desenvolvido como parte de projeto do Trabalho de Conclusão de Curso no Instituto Federal de São Paulo (IFSP) pelo aluno Alexandre Henrique Campini Pinheiro, sob a orientação do Prof. Dr. Juliano Pita.
+
+                O projeto combina Flask, JavaScript e Three.js para criar uma plataforma interativa de estudos de massa e sua relação com os lotes em São Paulo.</p> <p>Ele utiliza algoritmos genéticos para otimizar a relação entre edificações e terrenos disponíveis, considerando parâmetros urbanísticos como coeficiente de aproveitamento, taxa de ocupação e área permeável.
+                
+                Por meio da interface, os usuários podem visualizar lotes em São Paulo que comportariam os edifícios propostos, bem como sua relação com a cidade, respeitando as restrições normativas.</p><p> O sistema utiliza um fitness que considera, além dos parâmetros urbanísticos, a melhor área permeável como critério de "desempate" para que sejam sugeridos lotes com maior possibilidade de utilização de área livre, porém o algorítmo pode ser enviesado para considerar quantos fatores forem necessários visando sempre a interação do arquiteto.</p><p>
+                
+                Este aplicativo busca explorar a inteligência computacional e processamento de dados como parte integrante do processo de concepção arquitetônica, de modo a oferecer ao arquiteto-urbanista a possibilidade de se ter estudo de massa inicial desvinculado de restrições de terreno.</p>
+            <span class="fechar" onclick="fecharSobre()">x</span>
+        </div>
+    </div>
+    
+    <!-- Formulário de upload -->
+    <div class="caixa-container">
+        <!-- Passo 1: Upload do Modelo -->
+        <div class="passo">
+            <h3>1. Upload do modelo (.dae):</h3>
+            <input type="file" id="uploadEdificacao" />
+        </div>
+    
+        <!-- Passo 2: Insira os Parâmetros -->
+        <div class="passo">
+            <h3>2. Insira os Parâmetros de Ocupação</h3>
+            <p>Taxa de Ocupação (0.xx): <input type="text" id="toInsere"></p>
+            <p>Coeficiente de Aproveitamento (x): <input type="text" id="caInsere"></p>
+            <p>Área Permeável(m²): <input type="text" id="permeabilidade"></p>
+        </div>
+    
+        <!-- Botão para buscar terreno -->
+        <button onclick="buscarTerreno(); handleUpload(); abrirPopup()">BUSCAR TERRENO</button>
+    
+        <!-- Resultado -->
+        <p id="resultado"></p>
+    </div>
+
+    <!-- Exibição das informações do lote -->
+
+    <!-- Container para o visualizador 3D -->
+    <!-- Popup para exibir informações do lote -->
+<div id="popup" class="popup-container">
+        <span class="fechar" onclick="fecharPopupTerreno()">&times;</span>
+        <div id="loteInfo" style="margin-top: 20px;">
+            <h1 align="center">Melhor Lote Encontrado</h1>
+            <h3>Informações do Lote:</h3>
+            <p><strong>Setor:</strong> <span id="setor"></span></p>
+            <p><strong>Quadra:</strong> <span id="quadra"></span></p>
+            <p><strong>Lote:</strong> <span id="lote"></span></p>
+            <p><strong>Área do Terreno: </strong> <span id="area"></span></p>
+            <p><strong>C.A: </strong> <span id="ca"></span></p>
+            <p><strong>T.O: </strong> <span id="to"></span></p>
+            <p><strong>Coordenadas do Polígono:</strong></p>
+            
+            <pre id="polygon" style="background-color: #f9f9f9; padding: 10px; border: 1px solid #ddd; overflow-x: auto;"></pre>
+            <p align="center" id="visualizarModeloBtn"><strong>Visualizar Modelo 3D</strong></p>
+            <div id="map" style="width: 100%; height: 500px;"></div>
+    </div>
+</div>
+<div id="popupModelo3D" class="popup-container">
+    <div class="popup-content">
+        <div id="container"></div>
+        <button id="closeModelo3D" style="position: absolute; top: 20px; right: 20px; background-color: black; border: 1px solid #ddd; padding: 10px; cursor: pointer;">Fechar</button>
+    </div>
+</div>
+
+<script>
+    const visualizarModeloBtn = document.getElementById('visualizarModeloBtn');
+const popupModelo3D = document.getElementById('popupModelo3D');
+const closeModelo3D = document.getElementById('closeModelo3D');
+
+// Abrir a popup do modelo 3D
+visualizarModeloBtn.addEventListener('click', () => {
+    popupModelo3D.style.display = 'flex';
+});
+
+// Fechar a popup do modelo 3D
+closeModelo3D.addEventListener('click', () => {
+    popupModelo3D.style.display = 'none';
+});
+
+// Fechar a popup ao clicar fora do conteúdo
+popupModelo3D.addEventListener('click', (event) => {
+    if (event.target === popupModelo3D) {
+        popupModelo3D.style.display = 'none';
+    }
+});
+</script>
+  <script>
+      function mostrarSobre() {
+        document.getElementById("sobre").style.display = "flex";
+    }
+
+    function fecharSobre() {
+        document.getElementById("sobre").style.display = "none";
+    }
+    function abrirPopup() {
+    const popup = document.getElementById("popup");
+    const container = document.getElementById("container");
+    
+    popup.style.display = "flex";  // Exibe a popup
+    container.style.display = "block"; // Garante que o container está visível
+    
+}
+
+    function fecharPopupTerreno() {
+    document.getElementById("popup").style.display = "none";
+    }
+
+</script>
+    <script type="module" src="/static/js/viewer.js"></script>
+    <script defer>
+      let map; // Variável global para o mapa
+
+      async function buscarTerreno() {
+            // Obter valores do formulário
+            let ca = parseFloat(document.getElementById('caInsere').value);
+            let to = parseFloat(document.getElementById('toInsere').value);
+            let permeabilidade = parseFloat(document.getElementById('permeabilidade').value);
+
+            try {
+                // Buscar dados do JSON via API local
+                const response = await fetch('/get_info');
+                if (!response.ok) {
+                    throw new Error('Erro ao carregar dados do servidor.');
+                }
+
+                const terrenos = await response.json();
+                let melhorTerreno = null;
+                let menorDiferenca = Infinity;
+
+                terrenos.forEach(terreno => {
+                    // Calcular 25% da área total do terreno
+                    let areaPermeavelTerreno = terreno.area * 0.25;
+
+                    // Calcular diferença entre a área permeável desejada e a do terreno
+                    let diferencaPermeabilidade = Math.abs(areaPermeavelTerreno - permeabilidade);
+                    let diferencaCA = Math.abs(terreno.CA - ca);
+                    let diferencaTO = Math.abs(terreno.TO - to);
+
+                    // Critério de seleção: minimizar a diferença da área permeável, depois CA e TO
+                    let pontuacao = diferencaPermeabilidade + diferencaCA + diferencaTO;
+
+                    if (pontuacao < menorDiferenca) {
+                        menorDiferenca = pontuacao;
+                        melhorTerreno = terreno;
+                    }
+                });
+
+                if (melhorTerreno) {
+                    document.getElementById('loteInfo').style.display = 'block';
+                    document.getElementById('setor').innerText = melhorTerreno.setor;
+                    document.getElementById('quadra').innerText = melhorTerreno.quadra;
+                    document.getElementById('lote').innerText = melhorTerreno.lote;
+                    document.getElementById('ca').innerText = melhorTerreno.CA;
+                    document.getElementById('to').innerText = melhorTerreno.TO;
+                    document.getElementById('polygon').textContent = JSON.stringify(melhorTerreno.polygon);
+                    document.getElementById('area').textContent = `${melhorTerreno.area}m²`;
+
+                    // Plotar o polígono no mapa
+                    plotarPoligonoNoMapa(melhorTerreno.polygon);
+
+                    const nomeArquivoDAE = `setor_${melhorTerreno.setor}_quadra_${melhorTerreno.quadra}_lote_${melhorTerreno.lote}.dae`;
+                    carregarTerreno(nomeArquivoDAE);
+                    } else {
+                    document.getElementById('resultado').innerText = 'Nenhum terreno encontrado compatível.';
+                }
+            } catch (error) {
+                document.getElementById('resultado').innerText = `Erro: ${error.message}`;
+            }
+        }
+
+        function plotarPoligonoNoMapa(polygon) {
+            // Verificar se as coordenadas estão no formato [longitude, latitude] e inverter se necessário
+            const coordenadasCorrigidas = polygon.map(coord => [coord[1], coord[0]]);
+
+            // Inicializar o mapa se ainda não foi inicializado
+            if (!map) {
+                map = L.map('map').setView(coordenadasCorrigidas[0], 15); // Centralizar no primeiro ponto do polígono
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+            } else {
+                map.setView(coordenadasCorrigidas[0], 15); // Centralizar no primeiro ponto do polígono
+            }
+
+            // Limpar camadas anteriores (se houver)
+            map.eachLayer(layer => {
+                if (layer instanceof L.Polygon) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            // Adicionar o polígono ao mapa
+            L.polygon(coordenadasCorrigidas, { color: 'blue' }).addTo(map);
+        }
+    </script>
+</body>
+</html>
